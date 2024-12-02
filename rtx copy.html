@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Habit Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            width: 70%;
+            margin: 50px auto;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #ddd;
+        }
+
+        .form-container {
+            display: none;
+            margin-top: 20px;
+        }
+
+        input {
+            padding: 10px;
+            font-size: 16px;
+            margin: 10px;
+            width: 60%;
+        }
+
+        .graph-container {
+            margin-top: 20px;
+        }
+
+        #habit-form {
+            text-align: left;
+            margin-top: 20px;
+        }
+
+        #habit-input, #habit-progress, #last-10-days {
+            display: none;
+        }
+
+        .summary-table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+
+        .summary-table th, .summary-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+
+        .summary-table th {
+            background-color: #f2f2f2;
+        }
+
+        #feedback {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Habit Tracker</h1>
+
+        <div id="user-login">
+            <button onclick="showLogin()">Login</button>
+            <button onclick="showSignUp()">Sign Up</button>
+        </div>
+
+        <div id="user-form" class="form-container">
+            <input type="text" id="username" placeholder="Enter Username" />
+            <input type="password" id="password" placeholder="Enter Password" />
+            <button onclick="submitLogin()">Submit</button>
+        </div>
+
+        <div id="habit-container" style="display:none;">
+            <div class="menu">
+                <button onclick="showInput()">Update Habit</button>
+                <button onclick="viewProgress()">View Progress</button>
+                <button onclick="viewLast10Days()">View Last 10 Days</button>
+            </div>
+
+            <!-- Habit Input Section -->
+            <div id="habit-input" class="form-container">
+                <h3>Enter Habit Status for a Specific Day</h3>
+                <input type="number" id="day" placeholder="Enter Day (1-365)" />
+                <div id="habit-form"></div>
+                <button onclick="submitHabits()">Submit</button>
+            </div>
+
+            <!-- Habit Progress Section -->
+            <div id="habit-progress" class="form-container">
+                <h3>View Habit Progress</h3>
+                <input type="number" id="view-day" placeholder="Enter Day to View Progress" />
+                <button onclick="showProgressForDay()">Show Progress</button>
+                <div id="progress-bar" class="graph-container"></div>
+            </div>
+
+            <!-- Last 10 Days Progress -->
+            <div id="last-10-days" class="form-container">
+                <h3>Last 10 Days Progress</h3>
+                <table class="summary-table" id="last-10-summary"></table>
+                <canvas id="last-10-chart" width="400" height="200"></canvas>
+                <p><strong>Average Completion: <span id="average-completion"></span>%</strong></p>
+            </div>
+
+            <!-- Display Results -->
+            <div id="result"></div>
+            <div id="feedback"></div>
+        </div>
+    </div>
+
+    <script>
+        const habitNames = [
+            "Sleep 8 hrs", "Eat Healthy", "Exercise", "Study", 
+            "Read a Book", "Meditate", "Drink Water", "Limit Screen Time", 
+            "Practice Hobby", "Family Time", "Journal", "Wake Up Early", 
+            "Plan Day", "Go for a Walk", "Learn Something New"
+        ];
+
+        let currentUser = null;
+        let habits = Array(365).fill().map(() => Array(15).fill(0));
+        let lastUpdatedDay = 0;
+
+        // User Login/Sign-Up Functions
+        function showLogin() {
+            document.getElementById('user-login').style.display = 'none';
+            document.getElementById('user-form').style.display = 'block';
+            document.getElementById('user-form').querySelector('button').onclick = submitLogin;
+        }
+
+        function showSignUp() {
+            document.getElementById('user-login').style.display = 'none';
+            document.getElementById('user-form').style.display = 'block';
+            document.getElementById('user-form').querySelector('button').onclick = submitSignUp;
+        }
+
+        function submitLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                alert('Please enter both username and password');
+                return;
+            }
+
+            const userData = JSON.parse(localStorage.getItem('users')) || {};
+            if (userData[username] && userData[username].password === password) {
+                currentUser = username;
+                loadUserData();
+                alert('Login successful');
+            } else {
+                alert('Invalid username or password');
+            }
+        }
+
+        function submitSignUp() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                alert('Please enter both username and password');
+                return;
+            }
+
+            const userData = JSON.parse(localStorage.getItem('users')) || {};
+            if (userData[username]) {
+                alert('Username already exists');
+            } else {
+                userData[username] = { password, habits };
+                localStorage.setItem('users', JSON.stringify(userData));
+                currentUser = username;
+                loadUserData();
+                alert('Sign-up successful');
+            }
+        }
+
+        function loadUserData() {
+            const userData = JSON.parse(localStorage.getItem('users'));
+            habits = userData[currentUser].habits;
+            document.getElementById('habit-container').style.display = 'block';
+        }
+
+        // Habit Functions
+        function showInput() {
+            document.getElementById('habit-input').style.display = 'block';
+            document.getElementById('habit-progress').style.display = 'none';
+            document.getElementById('last-10-days').style.display = 'none';
+            document.getElementById('result').innerHTML = '';
+            document.getElementById('feedback').innerHTML = '';
+
+            const habitForm = document.getElementById('habit-form');
+            habitForm.innerHTML = '';
+            
+            for (let i = 0; i < habitNames.length; i++) {
+                habitForm.innerHTML += `
+                    <label for="habit${i}">${habitNames[i]}</label>
+                    <input type="checkbox" id="habit${i}" data-habit="${i}" />
+                `;
+            }
+        }
+
+        function submitHabits() {
+            const day = parseInt(document.getElementById('day').value);
+            if (isNaN(day) || day < 1 || day > 365) {
+                alert('Invalid Day');
+                return;
+            }
+            
+            habitNames.forEach((habit, index) => {
+                const habitStatus = document.getElementById(`habit${index}`).checked ? 1 : 0;
+                habits[day - 1][index] = habitStatus;
+            });
+
+            localStorage.setItem('users', JSON.stringify(JSON.parse(localStorage.getItem('users'))));
+            document.getElementById('habit-input').style.display = 'none';
+            document.getElementById('result').innerHTML = 'Habit status updated for day ' + day;
+
+            lastUpdatedDay = Math.max(lastUpdatedDay, day);
+        }
+
+        function viewProgress() {
+            document.getElementById('habit-progress').style.display = 'block';
+            document.getElementById('habit-input').style.display = 'none';
+            document.getElementById('last-10-days').style.display = 'none';
+            document.getElementById('result').innerHTML = '';
+            document.getElementById('feedback').innerHTML = '';
+        }
+
+        function showProgressForDay() {
+            const day = parseInt(document.getElementById('view-day').value);
+            if (isNaN(day) || day < 1 || day > 365) {
+                alert('Invalid Day');
+                return;
+            }
+
+            let progress = `Progress for Day ${day}:<br>`;
+            habits[day - 1].forEach((status, index) => {
+                progress += `${habitNames[index]}: ${status ? 'Completed' : 'Not Completed'}<br>`;
+            });
+
+            const dailyCompletion = (habits[day - 1].reduce((acc, status) => acc + status, 0) / habitNames.length) * 100;
+
+            const barWidth = Math.min(dailyCompletion, 100);
+            document.getElementById('progress-bar').innerHTML = `
+                <div class="bar" style="width: ${barWidth}%;">${dailyCompletion.toFixed(2)}%</div>
+            `;
+            document.getElementById('result').innerHTML = progress;
+        }
+
+        function viewLast10Days() {
+            if (lastUpdatedDay === 0) {
+                alert('Please update habits first.');
+                return;
+            }
+
+            document.getElementById('habit-input').style.display = 'none';
+            document.getElementById('habit-progress').style.display = 'none';
+            document.getElementById('last-10-days').style.display = 'block';
+            document.getElementById('result').innerHTML = '';
+            document.getElementById('feedback').innerHTML = '';
+
+            let tableHTML = `<tr><th>Day</th><th>Completed Habits</th><th>Not Completed</th><th>Completion %</th></tr>`;
+            let totalCompleted = 0;
+            let totalNotCompleted = 0;
+            let completionPercentages = [];
+
+            const startDay = Math.max(0, lastUpdatedDay - 10);
+            for (let i = startDay; i < lastUpdatedDay; i++) {
+                const completed = habits[i].filter(status => status === 1).length;
+                const notCompleted = habitNames.length - completed;
+                const completionPercentage = (completed / habitNames.length) * 100;
+
+                totalCompleted += completed;
+                totalNotCompleted += notCompleted;
+                completionPercentages.push(completionPercentage);
+
+                tableHTML += `
+                    <tr>
+                        <td>${i + 1}</td>
+                        <td>${completed}</td>
+                        <td>${notCompleted}</td>
+                        <td>${completionPercentage.toFixed(2)}%</td>
+                    </tr>
+                `;
+            }
+
+            const overallCompletionPercentage = (totalCompleted / (10 * habitNames.length)) * 100;
+            const averageCompletion = (completionPercentages.reduce((acc, val) => acc + val, 0) / completionPercentages.length).toFixed(2);
+            document.getElementById('average-completion').textContent = averageCompletion;
+
+            document.getElementById('last-10-summary').innerHTML = tableHTML;
+            generateLast10DaysChart(completionPercentages);
+        }
+
+        function generateLast10DaysChart(completionPercentages) {
+            new Chart(document.getElementById('last-10-chart'), {
+                type: 'bar',
+                data: {
+                    labels: Array.from({ length: completionPercentages.length }, (_, i) => `Day ${i + 1}`),
+                    datasets: [{
+                        label: 'Completion Percentage',
+                        data: completionPercentages,
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
